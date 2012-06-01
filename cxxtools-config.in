@@ -1,0 +1,144 @@
+#! /bin/sh
+
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+includedir=@includedir@
+libdir=@libdir@
+
+usage()
+{
+    cat 1>&2 <<EOF
+Usage: $0 [OPTION]
+
+Known values for OPTION are:
+
+  --libs            print library linking information
+  --cxxflags        print pre-processor and compiler flags
+  --properties app  print logging-properties-template for application "app"
+  --logfile file    set logfile to "file" in following "--properties"
+  --help            display this help and exit
+  --version         output version information
+EOF
+
+    exit 1
+}
+
+start_template()
+{
+  cat <<EOF
+# sample logging-properties for application ++APP++
+# put this in ++APP++.properties and use:
+#   log_init("++APP++.properties");
+# in your application to initialize logging
+#
+# define categories with:
+#   log_define("some.category")
+# this defines a static function, so you must put it outside other functions.
+# you can define a category per file or a category per namespace.
+#
+# print logging-messages with:
+#   log_fatal("some fatal message");
+#   log_error("some error message");
+#   log_warn("some warn message");
+#   log_info("some info message");
+#   log_debug("some debug message");
+#
+EOF
+}
+
+CXXTOOLS_LOGGING_CXXTOOLS_template()
+{
+  start_template
+
+  cat <<EOF
+rootLogger=INFO
+
+# define logger-categories
+logger.++APP++=INFO
+
+EOF
+
+  if [ -z "$LOGFILE_SET" ]
+  then
+    cat <<EOF
+# uncomment if you want to log to a file
+#file=$LOGFILE
+#maxfilesize=1MB
+#maxbackupindex=2
+#host=localhost:1234  # send log-messages with udp
+#disabled=1  # disable logging
+#logprocess=1  # log through separate process
+#logprocesuser=someuser  # change to user in log process
+#logprocesgroup=somegroup  # change to group in log process
+EOF
+  else
+    cat <<EOF
+file=$LOGFILE
+maxfilesize=1MB
+maxbackupindex=2
+flushdelay=100  # delay write in milliseconds
+#host=localhost:1234  # send log-messages with udp
+#disabled=1  # disable logging
+#logprocess=1  # log in separate process
+#logprocesuser=someuser  # change to user in log process
+#logprocesgroup=somegroup  # change to group in log process
+EOF
+  fi
+
+}
+
+if test $# -eq 0; then
+    usage 1
+fi
+
+LOGFILE=++APP++.log
+
+while test $# -gt 0; do
+    case "$1" in
+
+    --version)
+        echo @VERSION@
+        exit 0
+        ;;
+
+    --help)
+        usage 0
+        ;;
+
+    --cxxflags)
+        echo @CXXTOOLS_CXXFLAGS@
+        ;;
+
+    --libs)
+        echo @CXXTOOLS_LDFLAGS@ 
+        ;;
+
+    --properties)
+        if test $# -gt 1
+        then
+          CXXTOOLS_LOGGING_CXXTOOLS_template | sed "s/++APP++/$2/"
+          shift
+        else
+          usage 1
+        fi
+        ;;
+
+    --logfile)
+        if test $# -gt 1
+        then
+          LOGFILE=$2
+          LOGFILE_SET=1
+          shift
+        else
+          usage 1
+        fi
+        ;;
+
+    *)
+        usage 1
+        ;;
+    esac
+    shift
+done
+
+exit 0
