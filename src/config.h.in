@@ -3,6 +3,9 @@
 /* Define to 1 if you have the `accept4' function. */
 #undef HAVE_ACCEPT4
 
+/* Define to 1 if you have the `clock_gettime' function. */
+#undef HAVE_CLOCK_GETTIME
+
 /* Define to 1 if you have the <csignal> header file. */
 #undef HAVE_CSIGNAL
 
@@ -40,18 +43,17 @@
 /* Define to 1 if you have the <memory.h> header file. */
 #undef HAVE_MEMORY_H
 
+/* defined if MSG_NOSIGNAL is defined */
+#undef HAVE_MSG_NOSIGNAL
+
 /* Define to 1 if you have the <ndir.h> header file, and it defines `DIR'. */
 #undef HAVE_NDIR_H
 
 /* Define if you have POSIX threads libraries and header files. */
 #undef HAVE_PTHREAD
 
-/* defined if std::reverse_iterator<Iterator> is defined */
-#undef HAVE_REVERSE_ITERATOR
-
-/* defined if std::reverse_iterator<Iterator, Difference, Value, Pointer,
-   Reference> is defined */
-#undef HAVE_REVERSE_ITERATOR_4
+/* defined if socket option SO_NOSIGPIPE is supported */
+#undef HAVE_SO_NOSIGPIPE
 
 /* Define to 1 if you have the <stdint.h> header file. */
 #undef HAVE_STDINT_H

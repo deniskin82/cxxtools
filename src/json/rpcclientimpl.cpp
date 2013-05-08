@@ -31,6 +31,8 @@
 #include <cxxtools/remoteprocedure.h>
 #include <cxxtools/utf8codec.h>
 #include <cxxtools/jsonformatter.h>
+#include <cxxtools/ioerror.h>
+#include <cxxtools/clock.h>
 #include <stdexcept>
 
 log_define("cxxtools.json.rpcclient.impl")
@@ -52,8 +54,12 @@ RpcClientImpl::RpcClientImpl()
 
 void RpcClientImpl::connect(const std::string& addr, unsigned short port)
 {
-    _addr = addr;
-    _port = port;
+    if (_addr != addr || _port != port)
+    {
+        _socket.close();
+        _addr = addr;
+        _port = port;
+    }
 }
 
 void RpcClientImpl::close()
@@ -65,6 +71,9 @@ void RpcClientImpl::beginCall(IComposer& r, IRemoteProcedure& method, IDecompose
 {
     if (_socket.selector() == 0)
         throw std::logic_error("cannot run async rpc request without a selector");
+
+    if (_proc)
+        throw std::logic_error("asyncronous request already running");
 
     _proc = &method;
 
@@ -153,6 +162,30 @@ void RpcClientImpl::cancel()
     _stream.clear();
     _stream.buffer().discard();
     _proc = 0;
+}
+
+void RpcClientImpl::wait(std::size_t msecs)
+{
+    if (_socket.selector() == 0)
+        throw std::logic_error("cannot run async rpc request without a selector");
+
+    Clock clock;
+    if (msecs != RemoteClient::WaitInfinite)
+        clock.start();
+
+    std::size_t remaining = msecs;
+
+    while (activeProcedure() != 0)
+    {
+        if (_socket.selector()->wait(remaining) == false)
+            throw IOTimeout();
+
+        if (msecs != RemoteClient::WaitInfinite)
+        {
+            std::size_t diff = static_cast<std::size_t>(clock.stop().totalMSecs());
+            remaining = diff >= msecs ? 0 : msecs - diff;
+        }
+    }
 }
 
 void RpcClientImpl::prepareRequest(const String& name, IDecomposer** argv, unsigned argc)

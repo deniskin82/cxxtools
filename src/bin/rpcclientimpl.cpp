@@ -30,6 +30,8 @@
 #include <cxxtools/log.h>
 #include <cxxtools/remoteprocedure.h>
 #include <cxxtools/bin/rpcclient.h>
+#include <cxxtools/selector.h>
+#include <cxxtools/clock.h>
 #include <stdexcept>
 
 log_define("cxxtools.bin.rpcclient.impl")
@@ -39,14 +41,15 @@ namespace cxxtools
 namespace bin
 {
 
-RpcClientImpl::RpcClientImpl(RpcClient* client, SelectorBase& selector, const std::string& addr, unsigned short port)
-    : _client(client),
-      _proc(0),
+RpcClientImpl::RpcClientImpl(SelectorBase& selector, const std::string& addr, unsigned short port, const std::string& domain)
+    : _proc(0),
       _stream(_socket, 8192, true),
-      _formatter(_stream)
+      _formatter(_stream),
+      _exceptionPending(false),
+      _domain(domain)
 {
     setSelector(selector);
-    connect(addr, port);
+    connect(addr, port, domain);
 
     cxxtools::connect(_socket.connected, *this, &RpcClientImpl::onConnect);
     cxxtools::connect(_stream.buffer().outputReady, *this, &RpcClientImpl::onOutput);
@@ -54,13 +57,14 @@ RpcClientImpl::RpcClientImpl(RpcClient* client, SelectorBase& selector, const st
 
 }
 
-RpcClientImpl::RpcClientImpl(RpcClient* client, const std::string& addr, unsigned short port)
-    : _client(client),
-      _proc(0),
+RpcClientImpl::RpcClientImpl(const std::string& addr, unsigned short port, const std::string& domain)
+    : _proc(0),
       _stream(_socket, 8192, true),
-      _formatter(_stream)
+      _formatter(_stream),
+      _exceptionPending(false),
+      _domain(domain)
 {
-    connect(addr, port);
+    connect(addr, port, domain);
 
     cxxtools::connect(_socket.connected, *this, &RpcClientImpl::onConnect);
     cxxtools::connect(_stream.buffer().outputReady, *this, &RpcClientImpl::onOutput);
@@ -72,10 +76,16 @@ RpcClientImpl::~RpcClientImpl()
 {
 }
 
-void RpcClientImpl::connect(const std::string& addr, unsigned short port)
+void RpcClientImpl::connect(const std::string& addr, unsigned short port, const std::string& domain)
 {
-    _addr = addr;
-    _port = port;
+    if (_addr != addr || _port != port)
+    {
+        _socket.close();
+        _addr = addr;
+        _port = port;
+    }
+
+    _domain = domain;
 }
 
 void RpcClientImpl::close()
@@ -87,6 +97,9 @@ void RpcClientImpl::beginCall(IComposer& r, IRemoteProcedure& method, IDecompose
 {
     if (_socket.selector() == 0)
         throw std::logic_error("cannot run async rpc request without a selector");
+
+    if (_proc)
+        throw std::logic_error("asyncronous request already running");
 
     _proc = &method;
 
@@ -169,6 +182,30 @@ void RpcClientImpl::call(IComposer& r, IRemoteProcedure& method, IDecomposer** a
     }
 }
 
+void RpcClientImpl::wait(std::size_t msecs)
+{
+    if (!_socket.selector())
+        throw std::logic_error("cannot run async rpc request without a selector");
+
+    Clock clock;
+    if (msecs != RemoteClient::WaitInfinite)
+        clock.start();
+
+    std::size_t remaining = msecs;
+
+    while (activeProcedure() != 0)
+    {
+        if (_socket.selector()->wait(remaining) == false)
+            throw IOTimeout();
+
+        if (msecs != RemoteClient::WaitInfinite)
+        {
+            std::size_t diff = static_cast<std::size_t>(clock.stop().totalMSecs());
+            remaining = diff >= msecs ? 0 : msecs - diff;
+        }
+    }
+}
+
 void RpcClientImpl::cancel()
 {
     _socket.close();
@@ -179,7 +216,10 @@ void RpcClientImpl::cancel()
 
 void RpcClientImpl::prepareRequest(const String& name, IDecomposer** argv, unsigned argc)
 {
-    _stream << '\xc0' << _prefix << name << '\0';
+    if (_domain.empty())
+        _stream << '\xc0' << name << '\0';
+    else
+        _stream << '\xc3' << _domain << '\0' << name << '\0';
 
     for(unsigned n = 0; n < argc; ++n)
     {

@@ -29,27 +29,33 @@
 #include "fileimpl.h"
 #include "directoryimpl.h"
 #include "cxxtools/fileinfo.h"
+#include "cxxtools/directory.h"
 
-namespace cxxtools {
+namespace cxxtools
+{
 
 FileInfo::FileInfo()
 : _type(FileInfo::Invalid)
-, _reserved(0)
 {}
 
 
 FileInfo::FileInfo(const std::string& path)
 : _path(path)
-, _reserved(0)
 {
     _type = FileInfoImpl::getType( path.c_str() );
+}
+
+
+FileInfo::FileInfo(const DirectoryIterator& it)
+: _path(it.path())
+{
+    _type = FileInfoImpl::getType( _path.c_str() );
 }
 
 
 FileInfo::FileInfo(const FileInfo& fi)
 : _type(fi._type)
 , _path(fi._path)
-, _reserved(0)
 {
 }
 
@@ -123,37 +129,25 @@ std::size_t FileInfo::size() const
 }
 
 
-bool FileInfo::isDirectory() const
-{
-    return _type == FileInfo::Directory;
-}
-
-
-bool FileInfo::isFile() const
-{
-    return _type == FileInfo::File;
-}
-
-
 void FileInfo::remove()
 {
-    if(_type == FileInfo::File)
+    if (_type == FileInfo::Directory)
     {
-        return FileImpl::remove( _path.c_str() );
+        return DirectoryImpl::remove( _path.c_str() );
     }
 
-    return DirectoryImpl::remove( _path.c_str() );
+    return FileImpl::remove( _path.c_str() );
 }
 
 
 void FileInfo::move(const std::string& to)
 {
-    if(_type == FileInfo::File)
+    if(_type == FileInfo::Directory)
     {
-        return FileImpl::move( _path.c_str(), to.c_str() );
+        return DirectoryImpl::move( _path.c_str(), to.c_str() );
     }
 
-    return DirectoryImpl::move( _path.c_str(), to.c_str() );
+    return FileImpl::move( _path.c_str(), to.c_str() );
 }
 
 

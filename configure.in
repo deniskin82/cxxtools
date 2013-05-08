@@ -1,9 +1,9 @@
-AC_INIT(cxxtools, 2.1.1, [Tommi Maekitalo <tommi@tntnet.org>])
+AC_INIT(cxxtools, 2.2, [Tommi Maekitalo <tommi@tntnet.org>])
 AM_INIT_AUTOMAKE
 
 AC_PREREQ([2.5.9])
 
-abi_current=8
+abi_current=9
 abi_revision=0
 abi_age=0
 sonumber=${abi_current}:${abi_revision}:${abi_age}
@@ -25,8 +25,10 @@ AC_LANG(C++)
 
 AX_COMPILER_VENDOR
 AS_IF([test "$ax_cv_cxx_compiler_vendor" = "ibm"],
-      [CXXFLAGS="$CXXFLAGS -qrtti -qlanglvl=newexcp -D__NOLOCK_ON_INPUT -D__NOLOCK_ON_OUTPUT"])
-AX_CHECK_COMPILE_FLAG([-Wno-long-long], [CXXFLAGS="$CXXFLAGS -Wno-long-long"])
+      [CPPFLAGS="$CPPFLAGS -qrtti -qlanglvl=newexcp -D__NOLOCK_ON_INPUT -D__NOLOCK_ON_OUTPUT"],
+      AX_CHECK_COMPILE_FLAG([-Wno-long-long], [CPPFLAGS="$CPPFLAGS -Wno-long-long"])
+      AX_CHECK_COMPILE_FLAG([-Wall], [CPPFLAGS="$CPPFLAGS -Wall"])
+      AX_CHECK_COMPILE_FLAG([-pedantic], [CPPFLAGS="$CPPFLAGS -pedantic"]))
 
 AC_CHECK_HEADERS(sys/filio.h)
 AC_CHECK_HEADERS(csignal)
@@ -36,7 +38,9 @@ AC_CHECK_LIB(socket, accept)
 AC_CHECK_LIB(rt, sem_destroy)
 AC_SEARCH_LIBS(dlopen, dl, , AC_MSG_ERROR([dlopen not found]))
 AC_SEARCH_LIBS(inet_ntop, nsl socket resolv)
+AC_SEARCH_LIBS(clock_gettime, rt)
 AC_CHECK_FUNCS(inet_ntop accept4)
+AC_CHECK_FUNCS(clock_gettime)
 AC_TYPE_LONG_LONG_INT
 AC_TYPE_UNSIGNED_LONG_LONG_INT
 
@@ -52,7 +56,7 @@ if test "$ac_cv_type_long_long_int" = yes; then
         void f(long long);
         void f() { int64_t v = 1; f(v); }
         ])],
-      [AC_DEFINE(INT64_IS_BASETYPE, [], [defined if int64_t is one of the base types])])
+      [AC_DEFINE(INT64_IS_BASETYPE, 1, [defined if int64_t is one of the base types])])
 else
     AC_MSG_WARN([long long not found]);
     HAVE_LONG_LONG=NO_LONG_LONG
@@ -65,7 +69,7 @@ else
         void f(long);
         void f() { int64_t v = 1; f(v); }
         ])],
-      [AC_DEFINE(INT64_IS_BASETYPE, [], [defined if int64_t is one of the base types])])
+      [AC_DEFINE(INT64_IS_BASETYPE, 1, [defined if int64_t is one of the base types])])
 fi
 
 AC_SUBST(HAVE_LONG_LONG, "$HAVE_LONG_LONG")
@@ -77,8 +81,6 @@ else
     HAVE_UNSIGNED_LONG_LONG=NO_UNSIGNED_LONG_LONG
 fi
 AC_SUBST(HAVE_UNSIGNED_LONG_LONG, "$HAVE_UNSIGNED_LONG_LONG")
-
-AC_SUBST(NETWORK_LIBS)
 
 AC_ARG_WITH([iconvstream],
     AS_HELP_STRING([--with-iconvstream=yes|no], [compile iconv stream (default: no)]),
@@ -95,6 +97,12 @@ fi
 AM_CONDITIONAL(MAKE_ICONVSTREAM, test $with_iconvstream = yes)
 
 ACX_PTHREAD
+
+CC="$PTHREAD_CC"
+CXX="$PTHREAD_CXX"
+CFLAGS="$CFLAGS $PTHREAD_CFLAGS"
+CXXFLAGS="$CXXFLAGS $PTHREAD_CXXFLAGS"
+LIBS="$LIBS $PTHREAD_LIBS"
 
 AC_PROG_LIBTOOL
 
@@ -159,27 +167,41 @@ AC_COMPILE_IFELSE(
   [AC_LANG_SOURCE([#include <netinet/tcp.h>
    int i = TCP_DEFER_ACCEPT;
   ])],
-  AC_DEFINE(HAVE_TCP_DEFER_ACCEPT, [], [defined if TCP_DEFER_ACCEPT is defined]))
+  AC_DEFINE(HAVE_TCP_DEFER_ACCEPT, 1, [defined if TCP_DEFER_ACCEPT is defined]))
 
 AC_COMPILE_IFELSE(
   [AC_LANG_SOURCE([#include <sys/socket.h>
    #include <netinet/in.h>
    int i = IPPROTO_IPV6;
   ])],
-  AC_DEFINE(HAVE_IPV6, [], [defined if IPV6 is supported]))
+  AC_DEFINE(HAVE_IPV6, 1, [defined if IPV6 is supported]))
+
+AC_COMPILE_IFELSE(
+  [AC_LANG_SOURCE([
+   #include <sys/types.h>
+   #include <sys/socket.h>
+   int i = SO_NOSIGPIPE;
+  ])],
+  AC_DEFINE(HAVE_SO_NOSIGPIPE, 1, [defined if socket option SO_NOSIGPIPE is supported]))
+
+AC_COMPILE_IFELSE(
+  [AC_LANG_SOURCE([
+   #include <sys/types.h>
+   #include <sys/socket.h>
+   int i = MSG_NOSIGNAL;
+  ])],
+  AC_DEFINE(HAVE_MSG_NOSIGNAL, 1, [defined if MSG_NOSIGNAL is defined]))
 
 AC_COMPILE_IFELSE(
   [AC_LANG_SOURCE([#include <iterator>
    std::reverse_iterator<char*> r;])],
-  [HAVE_REVERSE_ITERATOR=HAVE_REVERSE_ITERATOR
-   AC_DEFINE(HAVE_REVERSE_ITERATOR, [], [defined if std::reverse_iterator<Iterator> is defined])],
+  [HAVE_REVERSE_ITERATOR=HAVE_REVERSE_ITERATOR],
   [HAVE_REVERSE_ITERATOR=NO_REVERSE_ITERATOR])
 
 AC_COMPILE_IFELSE(
   [AC_LANG_SOURCE([#include <iterator>
    std::reverse_iterator<char*, int, char, char*, char&> r;])],
-  [HAVE_REVERSE_ITERATOR_4=HAVE_REVERSE_ITERATOR_4
-   AC_DEFINE(HAVE_REVERSE_ITERATOR_4, [], [defined if std::reverse_iterator<Iterator, Difference, Value, Pointer, Reference> is defined])],
+  [HAVE_REVERSE_ITERATOR_4=HAVE_REVERSE_ITERATOR_4],
   [HAVE_REVERSE_ITERATOR_4=NO_REVERSE_ITERATOR_4])
 
 AC_SUBST(HAVE_REVERSE_ITERATOR, "$HAVE_REVERSE_ITERATOR")
@@ -206,7 +228,6 @@ AC_CONFIG_FILES([
   src/Makefile
   src/unit/Makefile
   src/http/Makefile
-  src/xml/Makefile
   src/xmlrpc/Makefile
   src/bin/Makefile
   src/json/Makefile
@@ -215,4 +236,15 @@ AC_CONFIG_FILES([
   test/Makefile
   ])
 
+AC_CONFIG_FILES([
+  pkgconfig/cxxtools-bin.pc 
+  pkgconfig/cxxtools-http.pc 
+  pkgconfig/cxxtools-json.pc 
+  pkgconfig/cxxtools.pc
+  pkgconfig/cxxtools-unit.pc
+  pkgconfig/cxxtools-xmlrpc.pc
+])
+
 AC_OUTPUT
+
+

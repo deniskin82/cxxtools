@@ -55,16 +55,16 @@ class RpcClientImpl : public Connectable
         void operator= (const RpcClientImpl&) { }
 
     public:
-        RpcClientImpl(RpcClient* client, const std::string& addr, unsigned short port);
+        RpcClientImpl(const std::string& addr, unsigned short port, const std::string& domain);
 
-        RpcClientImpl(RpcClient* client, SelectorBase& selector, const std::string& addr, unsigned short port);
+        RpcClientImpl(SelectorBase& selector, const std::string& addr, unsigned short port, const std::string& domain);
 
         ~RpcClientImpl();
 
         void setSelector(SelectorBase& selector)
         { selector.add(_socket); }
 
-        void connect(const std::string& addr, unsigned short port);
+        void connect(const std::string& addr, unsigned short port, const std::string& domain);
 
         void close();
 
@@ -77,13 +77,15 @@ class RpcClientImpl : public Connectable
         const IRemoteProcedure* activeProcedure() const
         { return _proc; }
 
+        void wait(std::size_t msecs);
+
         void cancel();
 
-        const std::string& prefix() const
-        { return _prefix; }
+        const std::string& domain() const
+        { return _domain; }
 
-        void prefix(const std::string& p)
-        { _prefix = p; }
+        void domain(const std::string& p)
+        { _domain = p; }
 
     private:
         void prepareRequest(const String& name, IDecomposer** argv, unsigned argc);
@@ -91,7 +93,6 @@ class RpcClientImpl : public Connectable
         void onOutput(StreamBuffer& sb);
         void onInput(StreamBuffer& sb);
 
-        RpcClient* _client;
         IRemoteProcedure* _proc;
         net::TcpSocket _socket;
         IOStream _stream;
@@ -103,7 +104,7 @@ class RpcClientImpl : public Connectable
 
         std::string _addr;
         unsigned short _port;
-        std::string _prefix;
+        std::string _domain;
 };
 
 }

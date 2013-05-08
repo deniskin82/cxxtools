@@ -44,14 +44,12 @@ endif
 
 BASE_LIBS = $(top_builddir)/src/libcxxtools.la
 HTTP_LIBS = $(BASE_LIBS) $(top_builddir)/src/http/libcxxtools-http.la
-XML_LIBS = $(BASE_LIBS) $(top_builddir)/src/xml/libcxxtools-xml.la
-XMLRPC_LIBS = $(XML_LIBS) $(top_builddir)/src/xmlrpc/libcxxtools-xmlrpc.la
+XMLRPC_LIBS = $(BASE_LIBS) $(top_builddir)/src/xmlrpc/libcxxtools-xmlrpc.la
 BIN_LIBS = $(HTTP_LIBS) $(top_builddir)/src/bin/libcxxtools-bin.la
 JSON_LIBS = $(HTTP_LIBS) $(top_builddir)/src/json/libcxxtools-json.la
 
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_builddir)/include -I$(top_srcdir)/include
 LDADD = $(top_builddir)/src/libcxxtools.la
-AM_CXXFLAGS = $(PTHREAD_CFLAGS)
 
 httpserver_LDADD =  $(HTTP_LIBS)
 httprequest_LDADD = $(HTTP_LIBS)
@@ -61,9 +59,9 @@ rpcaddclient_LDADD = $(XMLRPC_LIBS) $(BIN_LIBS) $(JSON_LIBS)
 json_LDADD = $(HTTP_LIBS)
 rpcasyncaddclient_LDADD = $(XMLRPC_LIBS) $(BIN_LIBS) $(JSON_LIBS)
 
-log.properties:
-	/bin/sh $(top_builddir)/cxxtools-config --properties cxxtools >$@
+log.xml:
+	/bin/sh $(top_builddir)/cxxtools-config --logxml cxxtools >$@
 
-noinst_DATA = log.properties
-CLEANFILES = log.properties
+noinst_DATA = log.xml
+CLEANFILES = log.xml
 EXTRA_DIST = README

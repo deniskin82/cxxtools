@@ -34,6 +34,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <vector>
 
 namespace cxxtools {
 
@@ -46,12 +47,13 @@ DirectoryIteratorImpl::DirectoryIteratorImpl()
 }
 
 
-DirectoryIteratorImpl::DirectoryIteratorImpl(const char* path)
+DirectoryIteratorImpl::DirectoryIteratorImpl(const char* path, bool skipHidden)
 : _refs(1),
   _path(path),
   _handle(0),
   _current(0),
-  _dirty(true)
+  _dirty(true),
+  _skipHidden(skipHidden)
 {
     _handle = ::opendir( path );
 
@@ -128,9 +130,12 @@ bool DirectoryIteratorImpl::advance()
     _dirty  = true;
 
     // _current == 0 means end
-    _current = ::readdir( _handle );
-    if(_current)
-        _name = _current->d_name;
+    do
+    {
+      _current = ::readdir( _handle );
+      if(_current)
+          _name = _current->d_name;
+    } while (_skipHidden && _current && _current->d_name[0] == '.');
 
     return _current != 0;
 }
@@ -194,12 +199,16 @@ void DirectoryImpl::chdir(const std::string& path)
 
 std::string DirectoryImpl::cwd()
 {
-    char cwd[PATH_MAX];
+    std::vector<char> cwd(1024);
 
-    if( !getcwd(cwd, PATH_MAX) )
-        throw SystemError("getcwd");
+    while ( getcwd(&cwd[0], cwd.size()) == 0 )
+    {
+        if (errno != ERANGE)
+            throw SystemError("getcwd");
+        cwd.resize(cwd.size() * 2);
+    }
 
-    return std::string(cwd);
+    return std::string(&cwd[0]);
 }
 
 

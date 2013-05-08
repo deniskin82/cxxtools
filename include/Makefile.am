@@ -51,6 +51,7 @@ nobase_include_HEADERS = \
         cxxtools/fdstream.h \
         cxxtools/formatter.h \
         cxxtools/file.h \
+        cxxtools/filedevice.h \
         cxxtools/fileinfo.h \
         cxxtools/function.h \
         cxxtools/function.tpp \
@@ -85,8 +86,8 @@ nobase_include_HEADERS = \
         cxxtools/jsonparser.h \
         cxxtools/jsonserializer.h \
         cxxtools/library.h \
+        cxxtools/lrucache.h \
         cxxtools/log.h \
-        cxxtools/loginit.h \
         cxxtools/main.h \
         cxxtools/md5.h \
         cxxtools/md5stream.h \
@@ -116,6 +117,7 @@ nobase_include_HEADERS = \
         cxxtools/posix/pipe.h \
         cxxtools/posix/pipestream.h \
         cxxtools/properties.h \
+        cxxtools/propertiesdeserializer.h \
         cxxtools/query_params.h \
         cxxtools/queue.h \
         cxxtools/quotedprintablestream.h \
@@ -163,7 +165,6 @@ nobase_include_HEADERS = \
         cxxtools/void.h \
         cxxtools/xmltag.h \
         cxxtools/log/cxxtools.h \
-        cxxtools/log/cxxtools_init.h \
         cxxtools/unit/application.h \
         cxxtools/unit/assertion.h \
         cxxtools/unit/registertest.h \
@@ -209,7 +210,8 @@ nobase_nodist_include_HEADERS = \
 if MAKE_ICONVSTREAM
 nobase_include_HEADERS += \
         cxxtools/iconverter.h \
-        cxxtools/iconvstream.h
+        cxxtools/iconvstream.h \
+        cxxtools/iconvwrap.h
 endif
 
 if MAKE_ATOMICITY_SUN

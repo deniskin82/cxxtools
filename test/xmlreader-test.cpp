@@ -88,14 +88,6 @@ class XmlReaderTest : public cxxtools::unit::TestSuite
             CXXTOOLS_UNIT_ASSERT_MSG(r == cxxtools::String(L"&amp;"),
                 "failed to get entity for character '&'; expected \"&amp;\" returned \"" << r.narrow() << '"');
 
-            r = resolver.getEntity(cxxtools::Char(0x2665));
-            CXXTOOLS_UNIT_ASSERT_MSG(r == cxxtools::String(L"&hearts;"),
-                "failed to get entity for character code 0x2665; expected \"&hearts;\" returned \"" << r.narrow() << '"');
-
-            r = resolver.getEntity(cxxtools::Char(0x2666));
-            CXXTOOLS_UNIT_ASSERT_MSG(r == cxxtools::String(L"&diams;"),
-                "failed to get entity for character code 0x2666; expected \"&diams;\" returned \"" << r.narrow() << '"');
-
             r = resolver.getEntity(cxxtools::Char(0x0022));
             CXXTOOLS_UNIT_ASSERT_MSG(r == cxxtools::String(L"&quot;"),
                 "failed to get entity for character code 0x0022; expected \"&quot;\" returned \"" << r.narrow() << '"');
@@ -109,7 +101,7 @@ class XmlReaderTest : public cxxtools::unit::TestSuite
         void AllEntities()
         {
             cxxtools::xml::EntityResolver resolver;
-            for (unsigned n = 0; n <= 0xFFFF; ++n)
+            for (cxxtools::Char::value_type n = 0; n <= 0xFFFF; ++n)
             {
                 cxxtools::String r = resolver.getEntity(cxxtools::Char(n));
                 if (r.size() > 2 && r[0] == '&' && r[r.size() - 1] == ';')

@@ -27,7 +27,6 @@
  */
 
 #include "rpcserverimpl.h"
-#include "listener.h"
 #include "socket.h"
 #include "worker.h"
 
@@ -132,8 +131,8 @@ RpcServerImpl::~RpcServerImpl()
 
 void RpcServerImpl::listen(const std::string& ip, unsigned short int port, int backlog)
 {
-    log_debug("listen on " << ip << " port " << port);
-    Listener* listener = new Listener(ip, port, backlog, net::TcpServer::DEFER_ACCEPT);
+    log_info("listen on " << ip << " port " << port);
+    net::TcpServer* listener = new net::TcpServer(ip, port, backlog, net::TcpServer::DEFER_ACCEPT);
     try
     {
         _listener.push_back(listener);
@@ -151,9 +150,6 @@ void RpcServerImpl::start()
 {
     log_trace("start server");
     runmode(RpcServer::Starting);
-
-    // SIGPIPE must be ignored
-    ::signal(SIGPIPE, SIG_IGN);
 
     MutexLock lock(_threadMutex);
     while (_threads.size() < minThreads())
@@ -176,7 +172,7 @@ void RpcServerImpl::terminate()
     try
     {
         for (unsigned n = 0; n < _listener.size(); ++n)
-            _listener[n]->wakeConnect();
+            _listener[n]->terminateAccept();
 
         _queue.put(0);
 

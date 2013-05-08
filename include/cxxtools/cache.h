@@ -221,22 +221,25 @@ namespace cxxtools
       /// puts a new element in the cache. If the element is already found in
       /// the cache, it is considered a cache hit and pushed to the top of the
       /// list.
-      void put(const Key& key, const Value& value)
+      Value& put(const Key& key, const Value& value)
       {
-        typename DataType::iterator it;
-        if (data.size() < maxElements)
+        typename DataType::iterator it = data.find(key);
+        if (it == data.end())
         {
-          data.insert(data.begin(),
-            typename DataType::value_type(key,
-              Data(data.size() < maxElements / 2, _nextSerial(), value)));
-        }
-        else if ((it = data.find(key)) == data.end())
-        {
-          // element not found
-          _dropLooser();
-          data.insert(data.begin(),
-            typename DataType::value_type(key,
-              Data(false, _nextSerial(), value)));
+          if (data.size() < maxElements)
+          {
+            it = data.insert(data.begin(),
+              typename DataType::value_type(key,
+                Data(data.size() < maxElements / 2, _nextSerial(), value)));
+          }
+          else
+          {
+            // element not found
+            _dropLooser();
+            it = data.insert(data.begin(),
+              typename DataType::value_type(key,
+                Data(false, _nextSerial(), value)));
+          }
         }
         else
         {
@@ -249,6 +252,8 @@ namespace cxxtools
             _makeLooser();
           }
         }
+
+        return it->second.value;
       }
 
       /// puts a new element on the top of the cache. If the element is already
@@ -293,7 +298,10 @@ namespace cxxtools
       {
         typename DataType::iterator it = data.find(key);
         if (it == data.end())
+        {
+          ++misses;
           return 0;
+        }
 
         it->second.serial = _nextSerial();
 
@@ -304,12 +312,13 @@ namespace cxxtools
           _makeLooser();
         }
 
+        ++hits;
         return &it->second.value;
       }
 
       /// returns a pair of values - a flag, if the value was found and the
       /// value if found or the passed default otherwise. If the value is
-      /// found it is a cahce hit and pushed to the top of the list.
+      /// found it is a cache hit and pushed to the top of the list.
       std::pair<bool, Value> getx(const Key& key, Value def = Value())
       {
         Value* v = getptr(key);

@@ -33,6 +33,8 @@ libcxxtools_la_SOURCES = \
 	eventsource.cpp \
 	fdstream.cpp \
 	file.cpp \
+	filedevice.cpp \
+	filedeviceimpl.cpp \
 	fileimpl.cpp \
 	fileinfo.cpp \
 	formatter.cpp \
@@ -63,9 +65,11 @@ libcxxtools_la_SOURCES = \
 	posix/pipestream.cpp \
 	posix/posixpipe.cpp \
 	properties.cpp \
+	propertiesdeserializer.cpp \
 	query_params.cpp \
 	quotedprintablestream.cpp \
 	regex.cpp \
+	remoteclient.cpp \
 	selectable.cpp \
 	selector.cpp \
 	selectorimpl.cpp \
@@ -104,7 +108,18 @@ libcxxtools_la_SOURCES = \
 	tcpsocketimpl.cpp \
 	tcpstream.cpp \
 	udp.cpp \
-	udpstream.cpp
+	udpstream.cpp \
+	xml/characters.cpp \
+	xml/endelement.cpp \
+	xml/entityresolver.cpp \
+	xml/namespacecontext.cpp \
+	xml/startelement.cpp \
+	xml/xmldeserializer.cpp \
+	xml/xmlerror.cpp \
+	xml/xmlformatter.cpp \
+	xml/xmlreader.cpp \
+	xml/xmlserializer.cpp \
+	xml/xmlwriter.cpp
 
 noinst_HEADERS = \
 	addrinfoimpl.h \
@@ -115,6 +130,7 @@ noinst_HEADERS = \
 	error.h \
 	facets.cpp \
 	fileimpl.h \
+	filedeviceimpl.h \
 	fileinfoimpl.h \
 	iodeviceimpl.h \
 	libraryimpl.h \
@@ -134,6 +150,7 @@ noinst_HEADERS = \
 
 if MAKE_ICONVSTREAM
 libcxxtools_la_SOURCES += \
+	iconvwrap.cpp \
 	iconvstream.cpp
 endif
 
@@ -198,5 +215,4 @@ libcxxtools_la_SOURCES += \
 endif
 
 libcxxtools_la_LIBADD = $(LIBICONV)
-libcxxtools_la_CXXFLAGS = $(PTHREAD_CFLAGS)
-libcxxtools_la_LDFLAGS = -version-info @sonumber@ $(PTHREAD_LIBS) @SHARED_LIB_FLAG@
+libcxxtools_la_LDFLAGS = -version-info @sonumber@ @SHARED_LIB_FLAG@

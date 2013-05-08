@@ -74,8 +74,8 @@ class TcpSocketImpl : public IODeviceImpl
 
         int checkConnect();
         void checkPendingError();
-        std::pair<int, const char*> tryConnect();
-        std::pair<int, const char*> _connectResult;
+        std::string tryConnect();
+        std::string _connectResult;
 
     public:
         explicit TcpSocketImpl(TcpSocket& socket);
@@ -99,11 +99,16 @@ class TcpSocketImpl : public IODeviceImpl
 
         void accept(const TcpServer& server, unsigned flags);
 
+        void terminateAccept();
+
         // implementation using poll
         void initWait(pollfd& pfd);
 
         // implementation using poll
         bool checkPollEvent(pollfd& pfd);
+
+        // overrid beginWrite to use send(2) instead of write(2)
+        virtual size_t beginWrite(const char* buffer, size_t n);
 };
 
 } // namespace net

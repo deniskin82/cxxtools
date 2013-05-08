@@ -27,9 +27,13 @@
  */
 
 #include "config.h"
-#ifdef HAVE_ACCEPT4
+#if defined(HAVE_ACCEPT4) || defined(HAVE_SO_NOSIGPIPE) || defined(MSG_NOSIGNAL)
 #include <sys/types.h>
 #include <sys/socket.h>
+#endif
+
+#if !defined(MSG_MSG_NOSIGNAL)
+#include <signal.h>
 #endif
 
 #include "tcpsocketimpl.h"
@@ -45,9 +49,9 @@
 #include <cstring>
 #include <cassert>
 #include <fcntl.h>
-#include <string.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sstream>
 
 log_define("cxxtools.net.tcpsocket.impl")
 
@@ -56,6 +60,18 @@ namespace cxxtools
 
 namespace net
 {
+
+namespace
+{
+    std::string connectFailedMessage(const AddrInfo& ai, int err)
+    {
+        std::ostringstream msg;
+        msg << "failed to connect to host \"" << ai.host() << "\" port " << ai.port()
+            << ": " << getErrnoString(err);
+        return msg.str();
+    }
+
+}
 
 void formatIp(const sockaddr_in& sa, std::string& str)
 {
@@ -174,24 +190,16 @@ int TcpSocketImpl::checkConnect()
 
 void TcpSocketImpl::checkPendingError()
 {
-    if (_connectResult.second)
+    if (!_connectResult.empty())
     {
-        std::pair<int, const char*> p = _connectResult;
-        _connectResult = std::pair<int, const char*>(0, 0);
-
-        if (p.first)
-        {
-            throw IOError(getErrnoString(p.first, p.second).c_str());
-        }
-        else
-        {
-            throw IOError("invalid address information");
-        }
+        std::string p = _connectResult;
+        _connectResult.clear();
+        throw IOError(p);
     }
 }
 
 
-std::pair<int, const char*> TcpSocketImpl::tryConnect()
+std::string TcpSocketImpl::tryConnect()
 {
     log_trace("tryConnect");
 
@@ -200,7 +208,9 @@ std::pair<int, const char*> TcpSocketImpl::tryConnect()
     if (_addrInfoPtr == _addrInfo.impl()->end())
     {
         log_debug("no more address informations");
-        return std::pair<int, const char*>(0, "invalid address information");
+        std::ostringstream msg;
+        msg << "invalid address information; host \"" << _addrInfo.host() << "\" port " << _addrInfo.port();
+        return msg.str();
     }
 
     while (true)
@@ -214,8 +224,20 @@ std::pair<int, const char*> TcpSocketImpl::tryConnect()
                 break;
 
             if (++_addrInfoPtr == _addrInfo.impl()->end())
-                return std::pair<int, const char*>(errno, "socket");
+            {
+                std::ostringstream msg;
+                msg << "failed to create socket for host \"" << _addrInfo.host()
+                    << "\" port " << _addrInfo.port()
+                    << ": " << getErrnoString();
+                return msg.str();
+            }
         }
+
+#ifdef HAVE_SO_NOSIGPIPE
+        static const int on = 1;
+        if (::setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on)) < 0)
+            throw cxxtools::SystemError("setsockopt(SO_NOSIGPIPE)");
+#endif
 
         IODeviceImpl::open(fd, true, false);
 
@@ -238,10 +260,10 @@ std::pair<int, const char*> TcpSocketImpl::tryConnect()
 
         close();
         if (++_addrInfoPtr == _addrInfo.impl()->end())
-            return std::pair<int, const char*>(errno, "connect");
+            return connectFailedMessage(_addrInfo, errno);
     }
 
-    return std::pair<int, const char*>(0, 0);
+    return std::string();
 }
 
 
@@ -295,7 +317,7 @@ void TcpSocketImpl::endConnect()
                 if (++_addrInfoPtr == _addrInfo.impl()->end())
                 {
                     // no more addrInfo - propagate error
-                    throw IOError(getErrnoString(sockerr, "connect").c_str());
+                    throw IOError(connectFailedMessage(_addrInfo, sockerr));
                 }
             }
             else if (++_addrInfoPtr == _addrInfo.impl()->end())
@@ -394,7 +416,7 @@ bool TcpSocketImpl::checkPollEvent(pollfd& pfd)
             close();
             _connectResult = tryConnect();
 
-            if (_isConnected || _connectResult.second)
+            if (_isConnected || !_connectResult.empty())
             {
                 // immediate success or error
                 log_debug("connected successfully");
@@ -407,7 +429,7 @@ bool TcpSocketImpl::checkPollEvent(pollfd& pfd)
                 initializePoll(&pfd, 1);
             }
 
-            return _isConnected;
+            return true;
         }
     }
     else if( pfd.revents & POLLOUT )
@@ -424,7 +446,7 @@ bool TcpSocketImpl::checkPollEvent(pollfd& pfd)
         if (++_addrInfoPtr == _addrInfo.impl()->end())
         {
             // no more addrInfo - propagate error
-            _connectResult = std::pair<int, const char*>(sockerr, "connect");
+            _connectResult = connectFailedMessage(_addrInfo, sockerr);
             _socket.connected(_socket);
             return true;
         }
@@ -439,6 +461,62 @@ bool TcpSocketImpl::checkPollEvent(pollfd& pfd)
 
     return false;
 }
+
+size_t TcpSocketImpl::beginWrite(const char* buffer, size_t n)
+{
+    log_debug("::send(" << _fd << ", buffer, " << n << ')');
+
+#if defined(HAVE_MSG_NOSIGNAL)
+
+    ssize_t ret = ::send(_fd, (const void*)buffer, n, MSG_NOSIGNAL);
+
+#elif defined(HAVE_SO_NOSIGPIPE)
+
+    ssize_t ret = ::send(_fd, (const void*)buffer, n, 0);
+
+#else
+
+    // block SIGPIPE
+    sigset_t sigpipeMask, oldSigmask;
+    sigemptyset(&sigpipeMask);
+    sigaddset(&sigpipeMask, SIGPIPE);
+    pthread_sigmask(SIG_BLOCK, &sigpipeMask, &oldSigmask);
+
+    // execute send
+    ssize_t ret = ::send(_fd, (const void*)buffer, n, 0);
+
+    // clear possible SIGPIPE
+    sigset_t pending;
+    sigemptyset(&pending);
+    sigpending(&pending);
+    if (sigismember(&pending, SIGPIPE))
+    {
+      static const struct timespec nowait = { 0, 0 };
+      while (sigtimedwait(&sigpipeMask, 0, &nowait) == -1 && errno == EINTR)
+        ;
+    }
+
+    // unblock SIGPIPE
+    pthread_sigmask(SIG_SETMASK, &oldSigmask, 0);
+
+#endif
+
+    log_debug("send returned " << ret);
+    if (ret > 0)
+        return static_cast<size_t>(ret);
+
+    if (ret == 0 || errno == ECONNRESET || errno == EPIPE)
+        throw IOError("lost connection to peer");
+
+    if(_pfd)
+    {
+        _pfd->events |= POLLOUT;
+    }
+
+    return 0;
+}
+
+
 
 } // namespace net
 

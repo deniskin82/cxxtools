@@ -34,13 +34,13 @@ namespace cxxtools
 namespace bin
 {
 
-RpcClient::RpcClient(SelectorBase& selector, const std::string& addr, unsigned short port)
-    : _impl(new RpcClientImpl(this, selector, addr, port))
+RpcClient::RpcClient(SelectorBase& selector, const std::string& addr, unsigned short port, const std::string& domain)
+    : _impl(new RpcClientImpl(selector, addr, port, domain))
 { 
 }
 
-RpcClient::RpcClient(const std::string& addr, unsigned short port)
-    : _impl(new RpcClientImpl(this, addr, port))
+RpcClient::RpcClient(const std::string& addr, unsigned short port, const std::string& domain)
+    : _impl(new RpcClientImpl(addr, port, domain))
 { 
 }
 
@@ -51,17 +51,23 @@ RpcClient::~RpcClient()
 
 void RpcClient::setSelector(SelectorBase& selector)
 {
+    if (!_impl)
+        _impl = new RpcClientImpl(std::string(), 0, std::string());
     _impl->setSelector(selector);
 }
 
-void RpcClient::connect(const std::string& addr, unsigned short port)
+void RpcClient::connect(const std::string& addr, unsigned short port, const std::string& domain)
 {
-    _impl->connect(addr, port);
+    if (!_impl)
+        _impl = new RpcClientImpl(addr, port, domain);
+    else
+        _impl->connect(addr, port, domain);
 }
 
 void RpcClient::close()
 {
-    _impl->close();
+    if (_impl)
+        _impl->close();
 }
 
 void RpcClient::beginCall(IComposer& r, IRemoteProcedure& method, IDecomposer** argv, unsigned argc)
@@ -84,19 +90,24 @@ const IRemoteProcedure* RpcClient::activeProcedure() const
     return _impl->activeProcedure();
 }
 
+void RpcClient::wait(std::size_t msecs)
+{
+    _impl->wait(msecs);
+}
+
 void RpcClient::cancel()
 {
     _impl->cancel();
 }
 
-const std::string& RpcClient::prefix() const
+const std::string& RpcClient::domain() const
 {
-    return _impl->prefix();
+    return _impl->domain();
 }
 
-void RpcClient::prefix(const std::string& p)
+void RpcClient::domain(const std::string& p)
 {
-    _impl->prefix(p);
+    _impl->domain(p);
 }
 
 }

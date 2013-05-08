@@ -43,24 +43,45 @@ RpcServer::RpcServer(EventLoopBase& eventLoop, const std::string& ip, unsigned s
     listen(ip, port, backlog);
 }
 
+RpcServer::RpcServer(EventLoopBase& eventLoop, unsigned short int port, int backlog)
+    : _impl(new RpcServerImpl(eventLoop, runmodeChanged, *this))
+{
+    listen(port, backlog);
+}
+
 RpcServer::~RpcServer()
 {
     delete _impl;
 }
 
-void RpcServer::addService(const std::string& praefix, const ServiceRegistry& service)
+void RpcServer::addService(const ServiceRegistry& service)
 {
     std::vector<std::string> procs = service.getProcedureNames();
 
     for (std::vector<std::string>::const_iterator it = procs.begin(); it != procs.end(); ++it)
     {
-        registerProcedure(praefix + *it, service.getProcedure(*it));
+        registerProcedure(*it, service.getProcedure(*it));
+    }
+}
+
+void RpcServer::addService(const std::string& domain, const ServiceRegistry& service)
+{
+    std::vector<std::string> procs = service.getProcedureNames();
+
+    for (std::vector<std::string>::const_iterator it = procs.begin(); it != procs.end(); ++it)
+    {
+        registerProcedure(domain + '\0' + *it, service.getProcedure(*it));
     }
 }
 
 void RpcServer::listen(const std::string& ip, unsigned short int port, int backlog)
 {
     _impl->listen(ip, port, backlog);
+}
+
+void RpcServer::listen(unsigned short int port, int backlog)
+{
+    _impl->listen(std::string(), port, backlog);
 }
 
 unsigned RpcServer::minThreads() const

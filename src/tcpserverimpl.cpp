@@ -30,6 +30,7 @@
 #include "tcpserverimpl.h"
 #include "tcpsocketimpl.h"
 #include "addrinfoimpl.h"
+#include "error.h"
 #include <cxxtools/net/tcpserver.h>
 #include <cxxtools/net/tcpsocket.h>
 #include <cxxtools/net/net.h>
@@ -47,6 +48,11 @@
 
 #ifdef HAVE_TCP_DEFER_ACCEPT
 #  include <netinet/tcp.h>
+#  include <sys/types.h>
+#  include <sys/socket.h>
+#endif
+
+#ifdef HAVE_SO_NOSIGPIPE
 #  include <sys/types.h>
 #  include <sys/socket.h>
 #endif
@@ -69,16 +75,24 @@ TcpServerImpl::TcpServerImpl(TcpServer& server)
   , _deferAccept(false)
 #endif
 {
-
+    int ret = ::pipe(_wakePipe);
+    if (ret == 1)
+        throwSystemError("pipe");
+    log_debug("wake pipe read fd=" << _wakePipe[0] << " write fd=" << _wakePipe[1]);
 }
 
+TcpServerImpl::~TcpServerImpl()
+{
+    ::close(_wakePipe[0]);
+    ::close(_wakePipe[1]);
+}
 
 int TcpServerImpl::create(int domain, int type, int protocol)
 {
     log_debug("create socket");
     int fd = ::socket(domain, type, protocol);
     if (fd < 0)
-        throw SystemError("socket");
+        throwSystemError("socket");
     return fd;
 }
 
@@ -130,7 +144,7 @@ void TcpServerImpl::listen(const std::string& ipaddr, unsigned short int port, i
             }
             catch (const SystemError&)
             {
-                log_debug("could not create socket; errno=" << errno << ": " << std::strerror(errno));
+                log_debug("could not create socket: " << getErrnoString());
                 continue;
             }
 
@@ -138,7 +152,7 @@ void TcpServerImpl::listen(const std::string& ipaddr, unsigned short int port, i
             fn = "setsockopt";
             if (::setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0)
             {
-                log_debug("could not set socket option SO_REUSEADDR " << fd << "; errno=" << errno << ": " << std::strerror(errno));
+                log_debug("could not set socket option SO_REUSEADDR " << fd << ": " << getErrnoString());
                 ::close(fd);
                 continue;
             }
@@ -148,7 +162,7 @@ void TcpServerImpl::listen(const std::string& ipaddr, unsigned short int port, i
             {
               if (::setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &on, sizeof(on)) < 0)
               {
-                  log_debug("could not set socket option IPV6_V6ONLY " << fd << "; errno=" << errno << ": " << std::strerror(errno));
+                  log_debug("could not set socket option IPV6_V6ONLY " << fd << ": " << getErrnoString());
                   ::close(fd);
                   continue;
               }
@@ -159,7 +173,7 @@ void TcpServerImpl::listen(const std::string& ipaddr, unsigned short int port, i
             fn = "bind";
             if (::bind(fd, it->ai_addr, it->ai_addrlen) != 0)
             {
-                log_debug("could not bind " << fd << "; errno=" << errno << ": " << std::strerror(errno));
+                log_debug("could not bind " << fd << ": " << getErrnoString());
                 ::close(fd);
                 continue;
             }
@@ -203,10 +217,17 @@ void TcpServerImpl::listen(const std::string& ipaddr, unsigned short int port, i
         if (errno == EADDRINUSE)
             throw AddressInUse(ipaddr, port);
         else
-            throw SystemError(fn);
+            throwSystemError(fn);
     }
 }
 
+void TcpServerImpl::terminateAccept()
+{
+    char ch = 'A';
+    int ret = ::write(_wakePipe[1], &ch, 1);
+    if (ret == -1)
+        throwSystemError("write(wake pipe)");
+}
 
 #ifdef HAVE_TCP_DEFER_ACCEPT
 void TcpServerImpl::deferAccept(bool sw)
@@ -271,7 +292,7 @@ bool TcpServerImpl::wait(std::size_t msecs)
             if (errno == EINTR)
                 continue;
             log_error("error in poll; errno=" << errno);
-            throw SystemError("poll");
+            throwSystemError("poll");
         }
         else if (p == 0)
         {
@@ -348,39 +369,54 @@ int TcpServerImpl::accept(int flags, struct sockaddr* sa, socklen_t& sa_len)
     Resetter<int> resetter(_pendingAccept);
     if (_pendingAccept == noPendingAccept)
     {
-        if (_listeners.size() == 1)
-            _pendingAccept = 0;
-        else
+        Resetter<pollfd*> resetter(_pfd);
+
+        std::vector<pollfd> fds(_listeners.size() + 1);
+
+        fds[0].fd = _wakePipe[0];
+        fds[0].revents = 0;
+        fds[0].events = POLLIN;
+
+        initializePoll(&fds[1], _listeners.size());
+
+        while (true)
         {
-            Resetter<pollfd*> resetter(_pfd);
-            std::vector<pollfd> fds(_listeners.size());
-            initializePoll(&fds[0], fds.size());
-
-            while (true)
+            log_debug("poll");
+            int p = ::poll(&fds[0], fds.size(), -1);
+            if (p > 0)
             {
-                log_debug("poll");
-                int p = ::poll(&fds[0], fds.size(), -1);
-                if (p > 0)
-                {
-                    break;
-                }
-                else if (p < 0)
-                {
-                    if (errno == EINTR)
-                        continue;
-                    log_error("error in poll; errno=" << errno);
-                    throw SystemError("poll");
-                }
+                break;
             }
-
-            for (std::vector<pollfd>::size_type n = 0; n < fds.size(); ++n)
+            else if (p < 0)
             {
-                if (fds[n].revents & POLLIN)
-                {
-                    log_debug("detected accept on fd " << fds[n].fd);
-                    _pendingAccept = n;
-                    break;
-                }
+                if (errno == EINTR)
+                    continue;
+                log_error("error in poll; errno=" << errno);
+                throwSystemError("poll");
+            }
+        }
+
+        if (fds[0].revents & POLLIN)
+        {
+            char buffer;
+
+            log_debug("wake accept event detected");
+
+            int ret = ::read(_wakePipe[0], &buffer, 1);
+            if (ret == -1)
+                throwSystemError("read(wake pipe)");
+
+            log_debug("accept terminated");
+            throw AcceptTerminated();
+        }
+
+        for (std::vector<pollfd>::size_type n = 0; n < _listeners.size(); ++n)
+        {
+            if (fds[n + 1].revents & POLLIN)
+            {
+                log_debug("detected accept on fd " << fds[n + 1].fd);
+                _pendingAccept = n;
+                break;
             }
         }
 
@@ -398,7 +434,7 @@ int TcpServerImpl::accept(int flags, struct sockaddr* sa, socklen_t& sa_len)
 
     int listenerFd = _listeners[_pendingAccept]._fd;
 
-    log_debug( "accept " << listenerFd << ", " << flags );
+    log_debug( "accept fd=" << listenerFd << ", flags=" << flags );
 
     bool inherit = (flags & TcpSocket::INHERIT) != 0;
 
@@ -427,7 +463,7 @@ int TcpServerImpl::accept(int flags, struct sockaddr* sa, socklen_t& sa_len)
                 useAccept4 = false;
             }
             else
-                throw SystemError("accept4");
+                throwSystemError("accept4");
         }
     }
 
@@ -439,7 +475,7 @@ int TcpServerImpl::accept(int flags, struct sockaddr* sa, socklen_t& sa_len)
         } while (clientFd < 0 && errno == EINTR);
 
         if( clientFd < 0 )
-            throw SystemError("accept");
+            throwSystemError("accept");
     }
 #else
     int clientFd;
@@ -449,7 +485,22 @@ int TcpServerImpl::accept(int flags, struct sockaddr* sa, socklen_t& sa_len)
     } while (clientFd < 0 && errno == EINTR);
 
     if( clientFd < 0 )
-        throw SystemError("accept");
+        throwSystemError("accept");
+
+    if (!inherit)
+    {
+        int flags = ::fcntl(clientFd, F_GETFD);
+        flags |= FD_CLOEXEC ;
+        int ret = ::fcntl(clientFd, F_SETFD, flags);
+        if (ret == -1)
+            throw IOError(getErrnoString("Could not set FD_CLOEXEC"));
+    }
+#endif
+
+#ifdef HAVE_SO_NOSIGPIPE
+        static const int on = 1;
+        if (::setsockopt(clientFd, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on)) < 0)
+            throw cxxtools::SystemError("setsockopt(SO_NOSIGPIPE)");
 #endif
 
     log_debug( "accepted on " << listenerFd << " => " << clientFd);

@@ -52,6 +52,7 @@ namespace cxxtools
 #endif
 
             DeserializerBase()
+                : _current(0)
             { }
 
             virtual ~DeserializerBase()
@@ -60,6 +61,12 @@ namespace cxxtools
             void begin()
             {
                 _current = &_si;
+                _si.clear();
+            }
+
+            void clear()
+            {
+                _current = 0;
                 _si.clear();
             }
 

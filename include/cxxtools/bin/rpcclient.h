@@ -54,15 +54,15 @@ class RpcClient : public RemoteClient
         : _impl(0)
         { }
 
-        RpcClient(SelectorBase& selector, const std::string& addr, unsigned short port);
+        RpcClient(SelectorBase& selector, const std::string& addr, unsigned short port, const std::string& domain = std::string());
 
-        RpcClient(const std::string& addr, unsigned short port);
+        RpcClient(const std::string& addr, unsigned short port, const std::string& domain = std::string());
 
         virtual ~RpcClient();
 
         void setSelector(SelectorBase& selector);
 
-        void connect(const std::string& addr, unsigned short port);
+        void connect(const std::string& addr, unsigned short port, const std::string& domain = std::string());
 
         void close();
 
@@ -74,11 +74,13 @@ class RpcClient : public RemoteClient
 
         const IRemoteProcedure* activeProcedure() const;
 
+        void wait(std::size_t msecs = WaitInfinite);
+
         void cancel();
 
-        const std::string& prefix() const;
+        const std::string& domain() const;
 
-        void prefix(const std::string& p);
+        void domain(const std::string& p);
 
 };
 

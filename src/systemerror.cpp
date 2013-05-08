@@ -40,7 +40,7 @@ SystemError::SystemError(int err, const char* fn)
 : std::runtime_error( getErrnoString(err, fn) )
 , m_errno(err)
 {
-  log_debug("system error; " << what());
+  //log_debug("system error; " << what());
 }
 
 
@@ -48,7 +48,7 @@ SystemError::SystemError(const char* fn)
 : std::runtime_error( getErrnoString(fn) )
 , m_errno(errno)
 {
-  log_debug("system error; " << what());
+  //log_debug("system error; " << what());
 }
 
 
@@ -56,21 +56,31 @@ SystemError::SystemError(const char* fn, const std::string& what)
 : std::runtime_error(fn && fn[0] ? (std::string("error in function ") + fn + ": " + what) : what),
   m_errno(0)
 {
-  log_debug("system error; " << std::exception::what());
+  //log_debug("system error; " << std::exception::what());
 }
 
 
 SystemError::~SystemError() throw()
 { }
 
+void throwSystemError(const char* msg)
+{
+    throw SystemError(msg);
+}
+
+void throwSystemError(int errnum, const char* msg)
+{
+    throw SystemError(errnum, msg);
+}
+
 OpenLibraryFailed::OpenLibraryFailed(const std::string& msg)
-: SystemError("", msg)
+: SystemError(0, msg)
 {
   log_debug("open library failed; " << what());
 }
 
 SymbolNotFound::SymbolNotFound(const std::string& sym)
-: SystemError("", "symbol not found: " + sym)
+: SystemError(0, "symbol not found: " + sym)
 , _symbol(sym)
 {
   log_debug("symbol " << sym << " not found; " << what());
